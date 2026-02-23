@@ -41,15 +41,27 @@ const MOTORIZED_PERSONAL = ['benzina','diesel','ibrida','elettrica','moto'];
 const WORKING_DAYS_YEAR  = 220;
 const WORKING_DAYS_MONTH = Math.round(WORKING_DAYS_YEAR / 12);
 
-const OLLAMA_URL = 'http://127.0.0.1:11434/api/generate';
-const OLLAMA_MODEL = 'phi3';
+// ── Configurazione Ollama ─────────────────────────────────────────────────────
+// Per cambiare l'IP del server remoto modifica solo remoteBase.
+const OLLAMA_CONFIG = {
+  remoteBase: 'http://192.168.1.9:11434',   // server di casa via VPN
+  localBase:  'http://127.0.0.1:11434',     // portatile (fallback)
+  model:      'phi3',
+  // Nessun timeout sulla generazione: il tempo dipende dal prompt e dalla CPU.
+  // Il ping (5s) verifica se il server è acceso prima di avviare la generazione.
+};
+// Usiamo /api/generate con il campo "system" separato:
+// è l'endpoint più compatibile con phi3 e non richiede supporto al ruolo system in messages[].
+const OLLAMA_REMOTE_URL = `${OLLAMA_CONFIG.remoteBase}/api/generate`;
+const OLLAMA_LOCAL_URL  = `${OLLAMA_CONFIG.localBase}/api/generate`;
+// ─────────────────────────────────────────────────────────────────────────────
+
+const OLLAMA_MODEL = OLLAMA_CONFIG.model;
 
 const SYSTEM_PROMPT =
-  'Sei un assistente educativo esperto di sostenibilità ambientale e ' +
-  'riduzione delle emissioni di CO₂. Fornisci solo consigli pratici, ' +
-  'chiari e didattici. Rispondi SOLO a domande inerenti sostenibilità, ' +
-  'mobilità sostenibile e riduzione CO₂. Per qualsiasi altro argomento ' +
-  'rispondi: "Posso aiutarti solo su temi di sostenibilità e mobilità."';
+  'Sei un assistente sulla sostenibilita e CO2. ' +
+  'Dai consigli brevi e pratici sulla mobilita sostenibile. ' +
+  'Solo argomenti ambientali.';
 
 // Dati globali
 let familyData  = [];   // risultato del form
@@ -770,38 +782,245 @@ function roundRect(ctx, x, y, w, h, r) {
 
 let aiContext = '';  // contesto emissioni da passare al modello
 
-function prepareAIContext(results) {
-  const lines = results.memberResults.map(m => {
-    const mezzi = Object.keys(m.breakdown).map(v => TRANSPORT_LABELS[v]).join(', ');
-    return `- ${m.nome}: ${fmt(m.yearlyKg)} kg CO₂/anno | ${fmt(m.monthlyKg)} kg/mese | mezzi: ${mezzi}`;
-  });
-  aiContext = `Dati emissioni nucleo familiare (${results.memberResults.length} membri):
-${lines.join('\n')}
-Totale famiglia: ${fmt(results.totalYearlyKg)} kg CO₂/anno, ${fmt(results.totalMonthlyKg)} kg/mese.`;
+/* ── Debug panel ──────────────────────────────────────────────────────────── */
+
+function debugLog(msg, type = 'ok') {
+  const logEl = document.getElementById('debug-log');
+  if (!logEl) return;
+  const now = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">[${now}]</span><span class="log-${type}">${escapeHtml(msg)}</span>`;
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
 }
 
-async function sendToOllama(userMessage) {
-  const prompt = `${SYSTEM_PROMPT}
+function debugSet(field, value, dotClass) {
+  const el = document.getElementById(`dbg-${field}`);
+  if (el) el.textContent = value;
+  if (dotClass) {
+    const dot = document.getElementById(`dbg-${field.replace('-url','-status').replace('-url','-status')}`);
+    // gestione dot separata per remote e local
+  }
+}
 
-Contesto dati emissioni:
-${aiContext}
+function debugUpdate({ remoteUrl, localUrl, active, last, error, remoteDot, localDot }) {
+  if (remoteUrl !== undefined) {
+    document.getElementById('dbg-remote-url').textContent = remoteUrl;
+  }
+  if (localUrl !== undefined) {
+    document.getElementById('dbg-local-url').textContent = localUrl;
+  }
+  if (active !== undefined) {
+    document.getElementById('dbg-active').textContent = active;
+  }
+  if (last !== undefined) {
+    document.getElementById('dbg-last').textContent = last;
+  }
+  if (error !== undefined) {
+    const el = document.getElementById('dbg-error');
+    el.textContent = error;
+    el.style.color = error === '—' ? '' : 'var(--danger)';
+  }
+  if (remoteDot !== undefined) {
+    const d = document.getElementById('dbg-remote-status');
+    d.className = 'debug-dot dot-' + remoteDot;
+    d.title = remoteDot;
+  }
+  if (localDot !== undefined) {
+    const d = document.getElementById('dbg-local-status');
+    d.className = 'debug-dot dot-' + localDot;
+    d.title = localDot;
+  }
+}
 
-Utente: ${userMessage}
-Assistente:`;
-
-  const response = await fetch(OLLAMA_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: OLLAMA_MODEL,
-      prompt,
-      stream: false,
-    }),
+function initDebugPanel() {
+  // Popola URL statici
+  debugUpdate({
+    remoteUrl: OLLAMA_REMOTE_URL,
+    localUrl:  OLLAMA_LOCAL_URL,
+    active:    '—',
+    last:      '—',
+    error:     '—',
+    remoteDot: 'idle',
+    localDot:  'idle',
   });
 
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
-  return data.response || '(risposta vuota)';
+  // Toggle apertura/chiusura
+  document.getElementById('debug-toggle')?.addEventListener('click', () => {
+    const body  = document.getElementById('debug-body');
+    const arrow = document.getElementById('debug-arrow');
+    const open  = !body.classList.contains('hidden');
+    body.classList.toggle('hidden', open);
+    arrow.textContent = open ? '▸' : '▾';
+  });
+
+  document.getElementById('debug-clear')?.addEventListener('click', () => {
+    const log = document.getElementById('debug-log');
+    if (log) log.innerHTML = '';
+  });
+}
+
+function prepareAIContext(results) {
+  // Prompt compatto: phi3 su CPU è lento, meno token = risposta più veloce
+  const totAnno  = fmt(results.totalYearlyKg);
+  const totMese  = fmt(results.totalMonthlyKg);
+  const membri   = results.memberResults.map(m => {
+    const mezzi = Object.keys(m.breakdown)
+      .map(v => TRANSPORT_LABELS[v].split(' ').slice(1).join(' '))
+      .join(', ');
+    return `${m.nome}: ${fmt(m.yearlyKg)} kg/anno (${mezzi})`;
+  }).join('; ');
+  aiContext = `Famiglia: ${results.memberResults.length} membri. Totale: ${totAnno} kg CO2/anno (${totMese}/mese). Dettaglio: ${membri}.`;
+}
+
+/**
+ * Ping veloce: verifica se il server Ollama è acceso facendo GET sulla root.
+ * La root risponde istantaneamente con "Ollama is running" → timeout corto (5s).
+ * Se il ping fallisce, saltiamo il server senza aspettare la generazione.
+ */
+async function pingOllama(baseUrl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(baseUrl, { signal: controller.signal });
+    return true;   // qualsiasi risposta = server acceso
+  } catch {
+    return false;  // timeout o rete irraggiungibile
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Chiama l'endpoint /api/generate di Ollama.
+ * Passa il system prompt nel campo dedicato "system" (Ollama lo inietta
+ * nel template del modello → compatibile con qualsiasi versione di phi3).
+ * NON usa /api/chat per evitare il 500 legato al ruolo "system" in messages[].
+ *
+ * @param {string} url    - URL completo dell'endpoint /api/generate
+ * @param {string} system - prompt di sistema
+ * @param {string} prompt - messaggio utente (include già il contesto emissioni)
+ * @returns {Promise<string>}
+ */
+async function fetchOllama(url, system, prompt, timeoutMs = 0) {
+  const controller = new AbortController();
+  // timeoutMs === 0 significa nessun timeout (utile per ollama locale su CPU lenta)
+  const timer = timeoutMs > 0
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+  try {
+    debugLog(`→ Invio richiesta a ${url}${timeoutMs > 0 ? ` (timeout ${timeoutMs/1000}s)` : ' (nessun timeout)'}`, 'warn');
+    const response = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal:  controller.signal,
+      body: JSON.stringify({
+        model:  OLLAMA_MODEL,
+        system: system,
+        prompt: prompt,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      let errBody = '';
+      try { errBody = await response.text(); } catch { /* ignore */ }
+      const msg = `HTTP ${response.status}: ${errBody.slice(0, 120)}`;
+      console.error(`[Ollama] ${msg} da ${url}`);
+      debugLog(`✗ ${url} → ${msg}`, 'err');
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data?.response ?? '';
+    if (!content) throw new Error('Risposta AI vuota');
+    debugLog(`✓ Risposta ricevuta da ${url} (${content.length} caratteri)`, 'ok');
+    return content.trim();
+
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const msg = `Timeout: nessuna risposta entro ${timeoutMs / 1000}s`;
+      debugLog(`✗ ${url} → ${msg}`, 'err');
+      throw new Error(msg);
+    }
+    if (err.message.startsWith('HTTP')) throw err;
+    debugLog(`✗ ${url} → ${err.message} (rete/CORS)`, 'err');
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Logica di fallback: remoto (VPN) → locale → errore.
+ *
+ * NOTA CORS: il probe GET cross-origin viene volutamente RIMOSSO perché il browser
+ * lo blocca con CORS prima che raggiunga il server, rendendo il remoto sempre "down".
+ * Si tenta direttamente la chiamata: se CORS non è configurato sul remoto, il browser
+ * mostra un TypeError di rete che viene catturato e passa al fallback locale.
+ * Per abilitare il remoto: OLLAMA_ORIGINS=* ollama serve  (sul PC di casa).
+ */
+async function sendToOllama(userMessage) {
+  const userWithContext = aiContext
+    ? `Contesto: ${aiContext} Domanda: ${userMessage}`
+    : userMessage;
+
+  debugUpdate({ active: 'In corso…', error: '—', remoteDot: 'idle', localDot: 'idle' });
+  debugLog('── Nuova richiesta AI ──', 'warn');
+
+  // ── Tentativo 1: server remoto via VPN ──────────────────────────────────
+  debugLog(`Tentativo 1: ping remoto ${OLLAMA_CONFIG.remoteBase}…`, 'warn');
+  debugUpdate({ last: `Remoto (${OLLAMA_REMOTE_URL})`, remoteDot: 'idle' });
+  const remoteAlive = await pingOllama(OLLAMA_CONFIG.remoteBase);
+  if (!remoteAlive) {
+    debugLog('✗ Remoto non raggiungibile (ping fallito), passo al locale', 'err');
+    debugUpdate({ remoteDot: 'error' });
+  } else {
+    debugLog('✓ Remoto raggiungibile, avvio generazione (senza timeout)…', 'ok');
+    debugUpdate({ remoteDot: 'ok', active: '🌐 Remoto – generazione in corso…' });
+    try {
+      const reply = await fetchOllama(OLLAMA_REMOTE_URL, SYSTEM_PROMPT, userWithContext, 0);
+      setOllamaStatus('remote');
+      debugUpdate({ active: '🌐 Remoto (VPN)', error: '—' });
+      debugLog('✓ Risposta ricevuta dal server remoto', 'ok');
+      return reply;
+    } catch (errRemote) {
+      debugUpdate({ remoteDot: 'error' });
+      debugLog(`✗ Remoto fallito dopo ping ok: ${errRemote.message}`, 'err');
+      console.info(`[Ollama] Remoto fallito (${errRemote.message}), provo locale…`);
+    }
+  }
+
+  // ── Tentativo 2: Ollama locale (fallback) ───────────────────────────────
+  debugLog(`Tentativo 2: ping locale ${OLLAMA_CONFIG.localBase}…`, 'warn');
+  debugUpdate({ last: `Locale (${OLLAMA_LOCAL_URL})`, localDot: 'idle' });
+  const localAlive = await pingOllama(OLLAMA_CONFIG.localBase);
+  if (!localAlive) {
+    debugLog('✗ Locale non raggiungibile (ping fallito)', 'err');
+    debugUpdate({ localDot: 'error' });
+  } else {
+    debugLog('✓ Locale raggiungibile, avvio generazione (senza timeout)…', 'ok');
+    debugUpdate({ localDot: 'ok', active: '💻 Locale – generazione in corso…' });
+    try {
+      const reply = await fetchOllama(OLLAMA_LOCAL_URL, SYSTEM_PROMPT, userWithContext, 0);
+      setOllamaStatus('local');
+      debugUpdate({ active: '💻 Locale', error: '—' });
+      debugLog('✓ Risposta ricevuta da Ollama locale', 'ok');
+      return reply;
+    } catch (errLocal) {
+      debugUpdate({ localDot: 'error' });
+      debugLog(`✗ Locale fallito dopo ping ok: ${errLocal.message}`, 'err');
+      console.warn('[Ollama] Locale fallito:', errLocal.message);
+    }
+  }
+
+  // ── Entrambi non disponibili ─────────────────────────────────────────────
+  const errMsg = 'Entrambi i server non disponibili';
+  debugUpdate({ active: '✗ Non disponibile', error: errMsg });
+  debugLog(`✗ ${errMsg}`, 'err');
+  setOllamaStatus('unavailable');
+  throw new Error('AI non disponibile');
 }
 
 function appendChatMessage(role, text) {
@@ -821,22 +1040,65 @@ function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+/* ── Stato connessione Ollama ─────────────────────────────────────────────── */
+
+/**
+ * @param {'remote'|'local'|'unavailable'|'idle'} status
+ */
+function setOllamaStatus(status) {
+  const el = document.getElementById('ollama-status');
+  const input = document.getElementById('chat-input');
+  const btn   = document.getElementById('btn-send');
+
+  el.className = 'ollama-status-bar';
+
+  switch (status) {
+    case 'remote':
+      el.className += ' status-ok';
+      el.innerHTML = '🌐 AI connessa al server remoto (VPN)';
+      el.classList.remove('hidden');
+      input.disabled = false;
+      btn.disabled   = false;
+      break;
+    case 'local':
+      el.className += ' status-warn';
+      el.innerHTML = '💻 AI connessa a Ollama locale (server remoto non raggiungibile)';
+      el.classList.remove('hidden');
+      input.disabled = false;
+      btn.disabled   = false;
+      break;
+    case 'unavailable':
+      el.className += ' status-error';
+      el.innerHTML = '⚠️ AI non disponibile. Possibili cause: VPN non attiva · Ollama non avviato (<code>ollama serve</code>) · CORS non abilitato (<code>OLLAMA_ORIGINS=* ollama serve</code>).';
+      el.classList.remove('hidden');
+      input.disabled = true;
+      btn.disabled   = true;
+      break;
+    default: // 'idle'
+      el.classList.add('hidden');
+      input.disabled = false;
+      btn.disabled   = false;
+  }
+}
+
+/* ── Setup chat ───────────────────────────────────────────────────────────── */
+
 function setupChat() {
   const input = document.getElementById('chat-input');
   const btn   = document.getElementById('btn-send');
 
   async function sendMessage() {
     const text = input.value.trim();
-    if (!text) return;
+    if (!text || btn.disabled) return;
     input.value = '';
     btn.disabled = true;
 
     appendChatMessage('user', text);
 
-    // Typing indicator
+    // Typing indicator con loader
     const typingDiv = document.createElement('div');
     typingDiv.className = 'msg msg-ai msg-typing';
-    typingDiv.innerHTML = '<div class="msg-avatar">🌿</div><div class="msg-bubble"></div>';
+    typingDiv.innerHTML = '<div class="msg-avatar">🌿</div><div class="msg-bubble"><span class="typing-loader"></span> Generazione risposta in corso…</div>';
     document.getElementById('chat-messages').appendChild(typingDiv);
     document.getElementById('chat-messages').scrollTop = 9999;
 
@@ -844,14 +1106,17 @@ function setupChat() {
       const reply = await sendToOllama(text);
       typingDiv.remove();
       appendChatMessage('ai', reply);
-      document.getElementById('ollama-status').classList.add('hidden');
     } catch (err) {
       typingDiv.remove();
-      document.getElementById('ollama-status').classList.remove('hidden');
-      appendChatMessage('ai', '⚠️ Non riesco a connettermi a Ollama. Assicurati che il servizio sia avviato con "ollama serve".');
+      appendChatMessage('ai', '⚠️ AI non disponibile. Verifica la VPN oppure avvia Ollama in locale con <ollama serve>.');
     } finally {
-      btn.disabled = false;
-      input.focus();
+      // riabilita input solo se l'AI non è in stato "unavailable"
+      const statusEl = document.getElementById('ollama-status');
+      if (!statusEl.classList.contains('status-error')) {
+        input.disabled = false;
+        btn.disabled   = false;
+        input.focus();
+      }
     }
   }
 
@@ -972,8 +1237,9 @@ function init() {
   // Bottone "Scarica PDF"
   document.getElementById('btn-pdf').addEventListener('click', exportPDF);
 
-  // Setup chat
+  // Setup chat e debug panel
   setupChat();
+  initDebugPanel();
 
   // Enter su input membri → genera form
   document.getElementById('num-members').addEventListener('keydown', e => {

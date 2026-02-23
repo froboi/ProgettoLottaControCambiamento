@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CO₂ Familiare – Calcolatore Emissioni</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ===== HEADER ===== -->
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <span class="leaf">🌿</span>
+        <span class="logo-text">CO₂ Familiare</span>
+      </div>
+      <button id="btn-theme" aria-label="Cambia tema" title="Cambia tema">
+        <span id="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== PAGINA 1 – INPUT ===== -->
+  <main id="page-input">
+
+    <section class="hero">
+      <h1>Calcola le emissioni di CO₂<br>della tua famiglia</h1>
+      <p class="subtitle">Inserisci le abitudini di spostamento casa–lavoro di ogni membro del nucleo familiare per scoprire l'impatto ambientale e ricevere consigli personalizzati.</p>
+    </section>
+
+    <!-- Step 1: numero membri -->
+    <section class="card">
+      <h2 class="card-title">
+        <span class="step-badge">1</span>
+        Nucleo familiare
+      </h2>
+      <div class="form-row">
+        <label for="num-members">Numero di componenti:</label>
+        <div class="input-group">
+          <input type="number" id="num-members" min="1" max="15" value="2" />
+          <button id="btn-genera" class="btn btn-primary">Genera form</button>
+        </div>
+      </div>
+      <p class="hint">⚠️ Inserisci un valore tra 1 e 15.</p>
+    </section>
+
+    <!-- Contenitore dinamico form membri -->
+    <div id="members-container"></div>
+
+    <!-- CTA calcola -->
+    <div id="cta-calcola" class="hidden">
+      <div class="card cta-card">
+        <p>Hai compilato i dati di tutti i membri. Pronto per calcolare?</p>
+        <div class="cta-actions">
+          <button id="btn-salva" class="btn btn-secondary">💾 Salva dati</button>
+          <button id="btn-calcola" class="btn btn-primary btn-large">🌍 Calcola emissioni</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ===== PAGINA 2 – RISULTATI ===== -->
+  <main id="page-results" class="hidden">
+
+    <section class="hero">
+      <h1>Risultati emissioni CO₂</h1>
+      <p class="subtitle" id="results-subtitle"></p>
+    </section>
+
+    <!-- Riepilogo globale -->
+    <section class="card">
+      <h2 class="card-title">
+        <span class="step-badge">📊</span>
+        Riepilogo familiare
+      </h2>
+      <div id="summary-cards" class="summary-grid"></div>
+    </section>
+
+    <!-- Emissioni per persona -->
+    <section class="card">
+      <h2 class="card-title">
+        <span class="step-badge">👤</span>
+        Emissioni per membro
+      </h2>
+      <div id="members-summary"></div>
+    </section>
+
+    <!-- Grafici -->
+    <section class="card">
+      <h2 class="card-title">
+        <span class="step-badge">📈</span>
+        Grafici
+      </h2>
+      <div class="charts-grid">
+        <div class="chart-box">
+          <h3>Emissioni per persona (kg CO₂/anno)</h3>
+          <canvas id="chart-bar"></canvas>
+        </div>
+        <div class="chart-box">
+          <h3>Distribuzione per mezzo di trasporto</h3>
+          <canvas id="chart-pie"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chatbot AI -->
+    <section class="card">
+      <h2 class="card-title">
+        <span class="step-badge">🤖</span>
+        Consigli AI personalizzati
+        <span class="badge-ollama">Powered by Ollama phi3</span>
+      </h2>
+      <p class="hint">Chatta con l'assistente AI per ricevere consigli pratici sulla mobilità sostenibile basati sui tuoi dati.</p>
+
+      <div id="chat-box">
+        <div id="chat-messages">
+          <div class="msg msg-ai">
+            <div class="msg-avatar">🌿</div>
+            <div class="msg-bubble">Ciao! Sono il tuo assistente per la sostenibilità. Ho analizzato i dati della tua famiglia. Chiedimi pure consigli su come ridurre le vostre emissioni di CO₂!</div>
+          </div>
+        </div>
+        <div id="chat-input-area">
+          <textarea id="chat-input" rows="2" placeholder="Scrivi un messaggio... (es. 'Come posso ridurre le mie emissioni?')"></textarea>
+          <button id="btn-send" class="btn btn-primary">Invia ▶</button>
+        </div>
+        <div id="chat-quick-actions">
+          <span class="quick-label">Domande rapide:</span>
+          <button class="quick-btn" data-q="Analizza le abitudini di mobilità della mia famiglia e suggerisci strategie concrete per ridurre le emissioni di CO₂.">Analisi completa</button>
+          <button class="quick-btn" data-q="Quali mezzi di trasporto alternativi potrei usare per ridurre le mie emissioni?">Alternative ecologiche</button>
+          <button class="quick-btn" data-q="Quanto potrei risparmiare in CO₂ se passassi ai mezzi pubblici?">Risparmio CO₂</button>
+        </div>
+        <p id="ollama-status" class="hint hidden">⚠️ Ollama non raggiungibile su localhost:11434. Avvia Ollama con <code>ollama serve</code>.</p>
+      </div>
+    </section>
+
+    <!-- Azioni finali -->
+    <div class="card cta-card">
+      <div class="cta-actions">
+        <button id="btn-indietro" class="btn btn-secondary">← Modifica dati</button>
+        <button id="btn-pdf" class="btn btn-primary">📄 Scarica PDF</button>
+      </div>
+    </div>
+
+  </main>
+
+  <footer>
+    <p>🌱 Progetto educativo per la riduzione delle emissioni CO₂ · Dati salvati localmente nel browser</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

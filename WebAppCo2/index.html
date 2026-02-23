@@ -131,7 +131,41 @@
           <button class="quick-btn" data-q="Quali mezzi di trasporto alternativi potrei usare per ridurre le mie emissioni?">Alternative ecologiche</button>
           <button class="quick-btn" data-q="Quanto potrei risparmiare in CO₂ se passassi ai mezzi pubblici?">Risparmio CO₂</button>
         </div>
-        <p id="ollama-status" class="hint hidden">⚠️ Ollama non raggiungibile su localhost:11434. Avvia Ollama con <code>ollama serve</code>.</p>
+        <p id="ollama-status" class="ollama-status-bar hidden"></p>
+
+        <!-- Debug panel (nascosto di default) -->
+        <div id="debug-panel">
+          <button id="debug-toggle" class="debug-toggle-btn">🔧 Debug AI <span id="debug-arrow">▸</span></button>
+          <div id="debug-body" class="debug-body hidden">
+            <div class="debug-row">
+              <span class="debug-label">Endpoint remoto (VPN):</span>
+              <span id="dbg-remote-url" class="debug-val mono">—</span>
+              <span id="dbg-remote-status" class="debug-dot">⬤</span>
+            </div>
+            <div class="debug-row">
+              <span class="debug-label">Endpoint locale:</span>
+              <span id="dbg-local-url" class="debug-val mono">—</span>
+              <span id="dbg-local-status" class="debug-dot">⬤</span>
+            </div>
+            <div class="debug-row">
+              <span class="debug-label">Connessione attiva:</span>
+              <span id="dbg-active" class="debug-val">—</span>
+            </div>
+            <div class="debug-row">
+              <span class="debug-label">Ultimo tentativo:</span>
+              <span id="dbg-last" class="debug-val">—</span>
+            </div>
+            <div class="debug-row">
+              <span class="debug-label">Ultimo errore:</span>
+              <span id="dbg-error" class="debug-val debug-error-text">—</span>
+            </div>
+            <div id="debug-log-box">
+              <div class="debug-label" style="margin-bottom:4px">Log eventi:</div>
+              <div id="debug-log"></div>
+            </div>
+            <button id="debug-clear" class="btn btn-sm btn-secondary" style="margin-top:6px">🗑 Pulisci log</button>
+          </div>
+        </div>
       </div>
     </section>
 

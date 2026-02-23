@@ -666,14 +666,10 @@ canvas {
   background: var(--chat-user);
   border-color: var(--accent-light);
 }
-.msg-typing .msg-bubble::after {
-  content: '●●●';
-  font-size: 0.7rem;
-  letter-spacing: 3px;
-  animation: blink 1.2s steps(3, start) infinite;
-  color: var(--accent);
+.msg-typing .msg-bubble {
+  color: var(--text-muted);
+  font-style: italic;
 }
-@keyframes blink { 33%{opacity:0} 66%{opacity:0.5} 100%{opacity:1} }
 
 #chat-input-area {
   display: flex;
@@ -711,6 +707,78 @@ canvas {
 }
 .quick-btn:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
 
+/* --- Debug panel --- */
+#debug-panel {
+  border-top: 1px solid var(--border);
+  background: var(--bg-card2);
+}
+.debug-toggle-btn {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.3px;
+  transition: color 0.2s;
+}
+.debug-toggle-btn:hover { color: var(--accent); }
+.debug-body {
+  padding: 0.6rem 0.9rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-top: 1px dashed var(--border);
+}
+.debug-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+}
+.debug-label {
+  color: var(--text-muted);
+  font-weight: 600;
+  min-width: 170px;
+}
+.debug-val {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+.mono { font-family: monospace; font-size: 0.76rem; }
+.debug-dot {
+  font-size: 0.7rem;
+}
+.dot-ok    { color: var(--success); }
+.dot-error { color: var(--danger); }
+.dot-idle  { color: var(--text-muted); }
+.debug-error-text { color: var(--danger); font-family: monospace; font-size: 0.75rem; }
+#debug-log-box {
+  margin-top: 0.4rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.4rem;
+}
+#debug-log {
+  font-family: monospace;
+  font-size: 0.73rem;
+  color: var(--text);
+  max-height: 140px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.log-entry { display: flex; gap: 0.4rem; }
+.log-time { color: var(--text-muted); flex-shrink: 0; }
+.log-ok   { color: var(--success); }
+.log-warn { color: var(--warning); }
+.log-err  { color: var(--danger); }
+
 /* --- Footer --- */
 footer {
   background: var(--footer-bg);
@@ -722,6 +790,56 @@ footer {
 
 /* --- Utilities --- */
 .hidden { display: none !important; }
+
+/* --- Ollama status bar --- */
+.ollama-status-bar {
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  font-weight: 600;
+  margin: 0.5rem 0.75rem;
+  border: 1px solid transparent;
+  transition: all 0.3s;
+}
+.ollama-status-bar code {
+  font-size: 0.82em;
+}
+.status-ok {
+  background: var(--badge-good);
+  color: var(--badge-good-text);
+  border-color: var(--success);
+}
+.status-warn {
+  background: var(--badge-medium);
+  color: var(--badge-medium-text);
+  border-color: var(--warning);
+}
+.status-error {
+  background: var(--badge-bad);
+  color: var(--badge-bad-text);
+  border-color: var(--danger);
+}
+
+/* --- Typing loader (spinner inline) --- */
+.typing-loader {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--accent-light);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 2px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Quando il chat è disabilitato */
+#chat-input:disabled,
+#btn-send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* --- Print styles --- */
 @media print {

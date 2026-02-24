@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Scienza del CO₂ – CO₂ Familiare</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- Applica il tema salvato prima del render per evitare il flash bianco -->
+  <script>
+    (function() {
+      const t = localStorage.getItem('co2_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <a class="logo" href="index.html" style="text-decoration:none">
+        <span class="leaf">🌿</span>
+        <span class="logo-text">CO₂ Familiare</span>
+      </a>
+      <nav class="header-nav">
+        <a class="nav-btn nav-btn-active" href="scienza.html">🔬 Scienza</a>
+        <a class="nav-btn" href="trasporti.html">🚗 Trasporti</a>
+        <button id="btn-theme" aria-label="Cambia tema" title="Cambia tema">
+          <span id="theme-icon">🌙</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <section class="hero">
+      <h1>🔬 La Scienza del CO₂</h1>
+      <p class="subtitle">Capire il biossido di carbonio per capire il cambiamento climatico.</p>
+    </section>
+
+    <!-- Cos'è il CO₂ -->
+    <section class="card">
+      <h2 class="card-title"><span class="step-badge">⚛️</span> Cos'è il CO₂?</h2>
+      <p>Il <strong>biossido di carbonio (CO₂)</strong> è una molecola composta da un atomo di carbonio legato a due atomi di ossigeno. È naturalmente presente nell'atmosfera ed è indispensabile per la fotosintesi delle piante. Il problema è l'<strong>eccesso</strong> prodotto dalle attività umane: combustione di fossili, deforestazione, industria.</p>
+      <div class="info-facts-grid">
+        <div class="info-fact"><div class="info-fact-val">422 ppm</div><div class="info-fact-label">Concentrazione CO₂ attuale in atmosfera (2024)</div></div>
+        <div class="info-fact"><div class="info-fact-val">280 ppm</div><div class="info-fact-label">Livello pre-industriale (1750)</div></div>
+        <div class="info-fact"><div class="info-fact-val">+1,2 °C</div><div class="info-fact-label">Aumento temperatura media globale dall'800</div></div>
+        <div class="info-fact"><div class="info-fact-val">37 Gt/anno</div><div class="info-fact-label">CO₂ emesso ogni anno dall'umanità</div></div>
+      </div>
+    </section>
+
+    <!-- Effetto serra -->
+    <section class="card">
+      <h2 class="card-title"><span class="step-badge">🌡️</span> L'effetto serra</h2>
+      <p>I gas serra (CO₂, metano CH₄, N₂O…) funzionano come una <strong>coperta attorno alla Terra</strong>: lasciano passare la luce solare, ma trattengono il calore riemesso dalla superficie. Senza effetto serra naturale la temperatura media sarebbe <strong>−18 °C</strong>; grazie ad esso è +15 °C. Il problema è che l'uomo sta <em>ispessendo</em> questa coperta, alzando troppo la temperatura.</p>
+      <div class="info-steps">
+        <div class="info-step"><span class="info-step-n">1</span><div><strong>Il sole irradia energia</strong> sulla Terra sotto forma di luce visibile.</div></div>
+        <div class="info-step"><span class="info-step-n">2</span><div><strong>La superficie si scalda</strong> e riemette energia come raggi infrarossi (calore).</div></div>
+        <div class="info-step"><span class="info-step-n">3</span><div><strong>I gas serra assorbono</strong> parte di questo calore e lo rimandano verso la Terra.</div></div>
+        <div class="info-step"><span class="info-step-n">4</span><div><strong>Più CO₂ = più calore trattenuto</strong> = aumento della temperatura globale.</div></div>
+      </div>
+    </section>
+
+    <!-- Timeline -->
+    <section class="card">
+      <h2 class="card-title"><span class="step-badge">📅</span> La storia in 5 date</h2>
+      <div class="info-timeline">
+        <div class="tl-item"><span class="tl-year">1750</span><p>Rivoluzione Industriale: il carbone sostituisce la legna. Le emissioni di CO₂ iniziano a salire sistematicamente.</p></div>
+        <div class="tl-item"><span class="tl-year">1958</span><p>Prima misurazione continua a Mauna Loa (Hawaii): <strong>315 ppm</strong>. Nasce la curva di Keeling.</p></div>
+        <div class="tl-item"><span class="tl-year">1988</span><p>Fondazione dell'<strong>IPCC</strong> (Gruppo Intergovernativo sul Cambiamento Climatico) da parte dell'ONU.</p></div>
+        <div class="tl-item"><span class="tl-year">2015</span><p><strong>Accordo di Parigi</strong>: 196 paesi si impegnano a limitare il riscaldamento globale sotto +1,5 °C.</p></div>
+        <div class="tl-item"><span class="tl-year">2024</span><p>Record storico di <strong>422 ppm</strong>. Il 2023 e il 2024 sono stati gli anni più caldi mai registrati.</p></div>
+      </div>
+    </section>
+
+    <!-- Conseguenze -->
+    <section class="card">
+      <h2 class="card-title"><span class="step-badge">⚠️</span> Conseguenze del riscaldamento</h2>
+      <div class="consequences-grid">
+        <div class="conseq-card"><div class="conseq-icon">🌊</div><div class="conseq-title">Scioglimento ghiacci</div><p>I ghiacciai artici e alpini si riducono. Il livello del mare è già salito di ~20 cm dal 1900.</p></div>
+        <div class="conseq-card"><div class="conseq-icon">🌪️</div><div class="conseq-title">Meteo estremo</div><p>Più calore = più energia nell'atmosfera = uragani, siccità, alluvioni più forti e frequenti.</p></div>
+        <div class="conseq-card"><div class="conseq-icon">🐾</div><div class="conseq-title">Biodiversità</div><p>Molte specie non riescono ad adattarsi ai cambiamenti rapidi. Rischio di estinzione accelerata.</p></div>
+        <div class="conseq-card"><div class="conseq-icon">🌾</div><div class="conseq-title">Agricoltura</div><p>Siccità e temperature estreme minacciano i raccolti. Entro il 2050 le rese potrebbero calare del 25%.</p></div>
+      </div>
+    </section>
+
+    <div class="card cta-card">
+      <p style="margin-bottom:1rem">Continua a leggere sui trasporti, o torna al calcolatore.</p>
+      <div class="cta-actions">
+        <a href="trasporti.html" class="btn btn-secondary">🚗 Vai a Trasporti &amp; Mobilità</a>
+        <a href="index.html"    class="btn btn-primary">← Torna al calcolatore</a>
+      </div>
+    </div>
+
+  </main>
+
+  <footer>
+    <p>🌱 Progetto educativo per la riduzione delle emissioni CO₂ · Dati salvati localmente nel browser</p>
+  </footer>
+
+  <script>
+    // Toggle tema – riusa la stessa logica di app.js ma standalone
+    (function() {
+      function setTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        document.getElementById('theme-icon').textContent = t === 'dark' ? '☀️' : '🌙';
+        localStorage.setItem('co2_theme', t);
+      }
+      const saved = localStorage.getItem('co2_theme') || 'dark';
+      setTheme(saved);
+      document.getElementById('btn-theme').addEventListener('click', function() {
+        const cur = document.documentElement.getAttribute('data-theme');
+        setTheme(cur === 'dark' ? 'light' : 'dark');
+      });
+    })();
+  </script>
+
+</body>
+</html>

@@ -1476,24 +1476,6 @@ function init() {
   // Bottone "Scarica PDF"
   document.getElementById('btn-pdf').addEventListener('click', exportPDF);
 
-  // ── Navigazione pagine informative ──────────────────────────────────────
-  // Tutte le pagine condividono lo stesso header; solo una è visibile alla volta.
-  const ALL_PAGES = ['page-input','page-results','page-scienza','page-trasporti'];
-
-  function showPage(id) {
-    ALL_PAGES.forEach(p => document.getElementById(p)?.classList.add('hidden'));
-    document.getElementById(id)?.classList.remove('hidden');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  document.getElementById('btn-nav-scienza')   ?.addEventListener('click', () => showPage('page-scienza'));
-  document.getElementById('btn-nav-trasporti')  ?.addEventListener('click', () => showPage('page-trasporti'));
-  document.getElementById('btn-scienza-back')   ?.addEventListener('click', () => showPage('page-input'));
-  document.getElementById('btn-trasporti-back') ?.addEventListener('click', () => showPage('page-input'));
-  document.getElementById('btn-scienza-to-trasporti')  ?.addEventListener('click', () => showPage('page-trasporti'));
-  document.getElementById('btn-trasporti-to-scienza')  ?.addEventListener('click', () => showPage('page-scienza'));
-  // ────────────────────────────────────────────────────────────────────────
-
   // Setup chat e debug panel
   setupChat();
   initDebugPanel();

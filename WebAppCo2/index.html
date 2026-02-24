@@ -1,9 +1,20 @@
 <!DOCTYPE html>
-<html lang="it" data-theme="light">
+<!--
+  index.html – CO₂ Familiare
+  SPA a due pagine (pagina-input / pagina-risultati) gestita da app.js.
+  Non si usa nessun framework: tutto è HTML puro + JS vanilla.
+-->
+<html lang="it" data-theme="dark">
+<!-- data-theme="dark" è il tema di default; JS lo legge da localStorage al primo caricamento -->
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CO₂ Familiare – Calcolatore Emissioni</title>
+  <!-- Preconnect velocizza il caricamento del font Google -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Font Inter: moderno, ottima leggibilità a tutte le dimensioni -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -24,12 +35,45 @@
   <!-- ===== PAGINA 1 – INPUT ===== -->
   <main id="page-input">
 
-    <section class="hero">
-      <h1>Calcola le emissioni di CO₂<br>della tua famiglia</h1>
-      <p class="subtitle">Inserisci le abitudini di spostamento casa–lavoro di ogni membro del nucleo familiare per scoprire l'impatto ambientale e ricevere consigli personalizzati.</p>
+    <section class="hero hero-home">
+      <div class="hero-content">
+        <span class="hero-badge">🌍 Progetto educativo sulla sostenibilità</span>
+        <h1>Misura l'impatto CO₂<br>della tua famiglia</h1>
+        <p class="subtitle">Scopri quante emissioni produce ogni membro della famiglia negli spostamenti quotidiani casa–lavoro. Visualizza i dati con grafici interattivi e ricevi consigli personalizzati dall'intelligenza artificiale per ridurre concretamente il tuo impatto ambientale.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-item">
+          <span class="feature-icon">🧮</span>
+          <div>
+            <div class="feature-label">Calcolo preciso</div>
+            <div class="feature-desc">Emissioni per ogni membro della famiglia</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">📊</span>
+          <div>
+            <div class="feature-label">Grafici interattivi</div>
+            <div class="feature-desc">Confronta e visualizza i tuoi dati</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">🤖</span>
+          <div>
+            <div class="feature-label">AI personalizzata</div>
+            <div class="feature-desc">Consigli su misura con Ollama phi3</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">🌱</span>
+          <div>
+            <div class="feature-label">Azioni concrete</div>
+            <div class="feature-desc">Riduci la tua impronta ecologica</div>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <!-- Step 1: numero membri -->
+    <!-- Step 1: selezione numero membri della famiglia (1–15) -->
     <section class="card">
       <h2 class="card-title">
         <span class="step-badge">1</span>
@@ -45,10 +89,10 @@
       <p class="hint">⚠️ Inserisci un valore tra 1 e 15.</p>
     </section>
 
-    <!-- Contenitore dinamico form membri -->
+    <!-- Contenitore dinamico: app.js vi inietta una .member-card per ogni membro -->
     <div id="members-container"></div>
 
-    <!-- CTA calcola -->
+    <!-- Bottone calcola: hidden finché il form non è generato (vedi generateMembersForm) -->
     <div id="cta-calcola" class="hidden">
       <div class="card cta-card">
         <p>Hai compilato i dati di tutti i membri. Pronto per calcolare?</p>
@@ -69,7 +113,7 @@
       <p class="subtitle" id="results-subtitle"></p>
     </section>
 
-    <!-- Riepilogo globale -->
+    <!-- Riepilogo globale: 4 summary-card (totale anno, mese, pro capite, giornaliero) -->
     <section class="card">
       <h2 class="card-title">
         <span class="step-badge">📊</span>
@@ -78,7 +122,7 @@
       <div id="summary-cards" class="summary-grid"></div>
     </section>
 
-    <!-- Emissioni per persona -->
+    <!-- Barre progresso per ogni membro con badge impatto e tag mezzi usati -->
     <section class="card">
       <h2 class="card-title">
         <span class="step-badge">👤</span>
@@ -87,7 +131,7 @@
       <div id="members-summary"></div>
     </section>
 
-    <!-- Grafici -->
+    <!-- Grafici Canvas ridisegnati ad ogni cambio tema e resize (vedi app.js: drawBarChart/drawPieChart) -->
     <section class="card">
       <h2 class="card-title">
         <span class="step-badge">📈</span>
@@ -115,6 +159,7 @@
       <p class="hint">Chatta con l'assistente AI per ricevere consigli pratici sulla mobilità sostenibile basati sui tuoi dati.</p>
 
       <div id="chat-box">
+        <!-- Messaggio di benvenuto pre-inserito nell'interfaccia chat -->
         <div id="chat-messages">
           <div class="msg msg-ai">
             <div class="msg-avatar">🌿</div>
@@ -131,9 +176,11 @@
           <button class="quick-btn" data-q="Quali mezzi di trasporto alternativi potrei usare per ridurre le mie emissioni?">Alternative ecologiche</button>
           <button class="quick-btn" data-q="Quanto potrei risparmiare in CO₂ se passassi ai mezzi pubblici?">Risparmio CO₂</button>
         </div>
+        <!-- Barra stato Ollama: mostra se connesso a remoto/locale o non disponibile -->
         <p id="ollama-status" class="ollama-status-bar hidden"></p>
 
-        <!-- Debug panel (nascosto di default) -->
+        <!-- Debug panel: collassabile, mostra URL endpoint, dot stato, log eventi Ollama -->
+        <!-- Utile durante lo sviluppo per capire se la VPN è attiva e dove si connette -->
         <div id="debug-panel">
           <button id="debug-toggle" class="debug-toggle-btn">🔧 Debug AI <span id="debug-arrow">▸</span></button>
           <div id="debug-body" class="debug-body hidden">

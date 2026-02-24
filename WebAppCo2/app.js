@@ -1,12 +1,35 @@
 // =============================================================
 //  CO₂ FAMILIARE – app.js
 //  Logica completa: form, calcolo, grafici, AI, storage, PDF
+//
+//  Struttura del file:
+//   1. COSTANTI         – fattori di emissione, etichette, config Ollama
+//   2. TEMA             – dark/light mode con localStorage
+//   3. GENERAZIONE FORM – card per ogni membro della famiglia
+//   4. RACCOLTA DATI    – lettura del form compilato
+//   5. VALIDAZIONE      – controlli sui dati inseriti
+//   6. CALCOLO          – emissioni giornaliere/mensili/annuali
+//   7. RISULTATI UI     – rendering della pagina risultati
+//   8. GRAFICI          – bar chart e donut chart su Canvas
+//   9. AI / CHAT        – integrazione Ollama (remoto + locale)
+//  10. LOCAL STORAGE    – salvataggio/caricamento dati
+//  11. PDF EXPORT       – stampa tramite window.print()
+//  12. INIT             – avvio app e registrazione eventi
 // =============================================================
 
 "use strict";
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ COSTANTI ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Emissioni medie in grammi di CO₂ per chilometro per ogni mezzo di trasporto.
+ * Fonti approssimative: ISPRA, EEA (Agenzia Europea dell'Ambiente).
+ * - Auto benzina/diesel: media italiana incluse inefficienze traffico
+ * - Ibrida:  risparmio ~47% rispetto a benzina
+ * - Elettrica: considerata la rete elettrica italiana (~47 gCO₂/km)
+ * - Treno:   media treni regionali/intercity italiani
+ * - Bicicletta/piedi: emissioni zero (solo quelle umane, trascurabili)
+ */
 const EMISSION_FACTORS = {         // g CO₂ per km
   benzina:  170,
   diesel:   150,
@@ -20,6 +43,7 @@ const EMISSION_FACTORS = {         // g CO₂ per km
   piedi:       0,
 };
 
+/** Etichette leggibili per l'interfaccia, associate ad ogni tipo di mezzo. */
 const TRANSPORT_LABELS = {
   benzina:    '🚗 Auto benzina',
   diesel:     '🚙 Auto diesel',
@@ -33,13 +57,15 @@ const TRANSPORT_LABELS = {
   piedi:      '🚶 A piedi',
 };
 
-const PERSONAL_VEHICLES  = ['benzina','diesel','ibrida','elettrica','moto'];
-const PUBLIC_VEHICLES    = ['treno','metro','autobus'];
-const ECO_VEHICLES       = ['bicicletta','piedi'];
-const MOTORIZED_PERSONAL = ['benzina','diesel','ibrida','elettrica','moto'];
+// Raggruppamenti dei mezzi per categoria (usati nella generazione del form)
+const PERSONAL_VEHICLES  = ['benzina','diesel','ibrida','elettrica','moto'];  // mezzi propri
+const PUBLIC_VEHICLES    = ['treno','metro','autobus'];                       // trasporto pubblico
+const ECO_VEHICLES       = ['bicicletta','piedi'];                            // zero emissioni
+const MOTORIZED_PERSONAL = ['benzina','diesel','ibrida','elettrica','moto'];  // motorizzati (stessa lista, per chiarezza)
 
+// Giorni lavorativi standard: 220 giorni/anno (5 gg × 44 settimane, escluse ferie)
 const WORKING_DAYS_YEAR  = 220;
-const WORKING_DAYS_MONTH = Math.round(WORKING_DAYS_YEAR / 12);
+const WORKING_DAYS_MONTH = Math.round(WORKING_DAYS_YEAR / 12); // ≈ 18 giorni/mese
 
 // ── Configurazione Ollama ─────────────────────────────────────────────────────
 // Per cambiare l'IP del server remoto modifica solo remoteBase.
@@ -58,55 +84,82 @@ const OLLAMA_LOCAL_URL  = `${OLLAMA_CONFIG.localBase}/api/generate`;
 
 const OLLAMA_MODEL = OLLAMA_CONFIG.model;
 
+/**
+ * System prompt inviato a Ollama ad ogni richiesta.
+ * Mantiene il modello focalizzato esclusivamente sulla sostenibilità.
+ * Non includere istruzioni di formato JSON qui: si usano risposte in testo libero.
+ */
 const SYSTEM_PROMPT =
   'Sei un assistente sulla sostenibilita e CO2. ' +
   'Dai consigli brevi e pratici sulla mobilita sostenibile. ' +
   'Solo argomenti ambientali.';
 
-// Dati globali
-let familyData  = [];   // risultato del form
-let resultsData = [];   // calcolato
+// ── Stato globale dell'applicazione ─────────────────────────────────────────
+let familyData  = [];   // array con i dati del form compilato (un oggetto per membro)
+let resultsData = [];   // risultati calcolati (emissioni, breakdown, totali)
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ TEMA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Legge il tema salvato in localStorage (default: 'dark') e lo applica.
+ * Registra anche il listener del bottone toggle tema.
+ */
 function initTheme() {
-  const saved = localStorage.getItem('co2_theme') || 'light';
+  const saved = localStorage.getItem('co2_theme') || 'dark'; // dark di default
   setTheme(saved);
   document.getElementById('btn-theme').addEventListener('click', () => {
     const current = document.documentElement.getAttribute('data-theme');
-    setTheme(current === 'dark' ? 'light' : 'dark');
+    setTheme(current === 'dark' ? 'light' : 'dark'); // alterna tra i due temi
   });
 }
 
+/**
+ * Applica il tema passato aggiornando l'attributo HTML e l'icona del bottone.
+ * Salva la scelta in localStorage per mantenerla al prossimo caricamento.
+ * @param {'dark'|'light'} theme
+ */
 function setTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.setAttribute('data-theme', theme); // cambia variabili CSS
   document.getElementById('theme-icon').textContent = theme === 'dark' ? '☀️' : '🌙';
   localStorage.setItem('co2_theme', theme);
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ GENERAZIONE FORM ━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Genera le card del form per n membri della famiglia.
+ * Svuota il container e ricrea tutto da zero per evitare duplicati.
+ * @param {number} n - Numero di membri (1–15)
+ */
 function generateMembersForm(n) {
   const container = document.getElementById('members-container');
-  container.innerHTML = '';
+  container.innerHTML = ''; // pulisce le card precedenti
 
   for (let i = 0; i < n; i++) {
     const card = createMemberCard(i, n);
     container.appendChild(card);
   }
 
-  // Mostra CTA calcola
+  // Mostra il bottone "Calcola emissioni" solo dopo la generazione
   document.getElementById('cta-calcola').classList.remove('hidden');
 
-  // Aggiorna selezione membri condivisi ogni volta che un nome cambia
+  // Ogni volta che un nome cambia, aggiorna le checkbox "viaggio condiviso"
   container.querySelectorAll('.member-name-input').forEach(inp => {
     inp.addEventListener('input', updateSharedMemberSelectors);
   });
 
-  // Carica dati salvati se esistenti
+  // Ripristina i nomi salvati in localStorage (se presenti)
   loadSavedFormData();
 }
 
+/**
+ * Crea e restituisce il nodo DOM di una singola card membro.
+ * Ogni card contiene: nome, tab Andata/Ritorno, pannello con categoria
+ * trasporto (personale/pubblico/ecologico), km, opzione viaggio condiviso.
+ * @param {number} index - Indice del membro (0-based)
+ * @param {number} total - Totale membri (non usato nel rendering ma utile per estensioni)
+ * @returns {HTMLElement}
+ */
 function createMemberCard(index, total) {
   const card = document.createElement('div');
   card.className = 'member-card';
@@ -145,6 +198,13 @@ function createMemberCard(index, total) {
   return card;
 }
 
+/**
+ * Genera l'HTML interno di un pannello direzione (andata o ritorno).
+ * Include tutte e tre le categorie di trasporto e le relative opzioni.
+ * @param {number} mIdx - Indice del membro
+ * @param {'andata'|'ritorno'} dir - Direzione del tragitto
+ * @returns {string} HTML da inserire nel pannello
+ */
 function buildDirectionPanel(mIdx, dir) {
   return `
     <!-- Categoria trasporto -->
@@ -225,8 +285,17 @@ function buildDirectionPanel(mIdx, dir) {
   `;
 }
 
+/**
+ * Registra tutti gli eventi interattivi di una card membro:
+ * - switch tra tab Andata/Ritorno
+ * - selezione categoria trasporto
+ * - click sulle opzioni di trasporto (radio/checkbox)
+ * - toggle viaggio condiviso e proseguimento separato
+ * @param {HTMLElement} card - Elemento DOM della card
+ * @param {number} mIdx    - Indice del membro
+ */
 function setupCardEvents(card, mIdx) {
-  // Tab switching
+  // ── Switch tab Andata / Ritorno ──
   card.querySelectorAll('.dir-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       const dir = tab.dataset.dir;
@@ -237,7 +306,7 @@ function setupCardEvents(card, mIdx) {
     });
   });
 
-  // Category buttons
+  // ── Bottoni categoria trasporto (Personale / Pubblico / Ecologico) ──
   card.querySelectorAll('.cat-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const dir = btn.dataset.dir;
@@ -250,7 +319,8 @@ function setupCardEvents(card, mIdx) {
     });
   });
 
-  // Transport option clicks (personale = radio)
+  // ── Selezione visiva opzioni di trasporto e checkboxes trasporto pubblico ──
+  // (per personale = radio con .selected visivo; per pubblico = checkbox multipli)
   ['andata','ritorno'].forEach(dir => {
     const personalOpts = card.querySelector(`#opts-personale-${mIdx}-${dir}`);
     if (personalOpts) {
@@ -312,6 +382,17 @@ function setupCardEvents(card, mIdx) {
   });
 }
 
+/**
+ * Mostra il pannello opzioni corretto in base alla categoria selezionata.
+ * Nasconde gli altri due pannelli e gestisce la visibilità di:
+ * - riga km principale (hidden per pubblico, che ha km per singolo mezzo)
+ * - righe km pubblico (visible solo per pubblico)
+ * - sezione viaggio condiviso (visible solo per personale)
+ * @param {HTMLElement} card
+ * @param {number} mIdx
+ * @param {'andata'|'ritorno'} dir
+ * @param {'personale'|'pubblico'|'ecologico'} cat
+ */
 function switchCategory(card, mIdx, dir, cat) {
   const panels = ['personale','pubblico','ecologico'];
   panels.forEach(p => {
@@ -333,6 +414,13 @@ function switchCategory(card, mIdx, dir, cat) {
   if (sharedSection) sharedSection.classList.toggle('hidden', cat !== 'personale');
 }
 
+/**
+ * Aggiorna dinamicamente le righe km per ogni mezzo pubblico spuntato.
+ * Quando l'utente seleziona treno + metro, vengono mostrati due campi km separati.
+ * @param {HTMLElement} card
+ * @param {number} mIdx
+ * @param {'andata'|'ritorno'} dir
+ */
 function updatePublicKmRows(card, mIdx, dir) {
   const container = card.querySelector(`#pub-km-rows-${mIdx}-${dir}`);
   if (!container) return;
@@ -347,6 +435,11 @@ function updatePublicKmRows(card, mIdx, dir) {
       </div>`).join('') + '</div>' : '';
 }
 
+/**
+ * Aggiorna le checkbox "membri coinvolti" nelle sezioni viaggio condiviso.
+ * Viene chiamata ogni volta che viene digitato un nome o creato il form,
+ * così le checkbox riflettono sempre i nomi attuali degli altri membri.
+ */
 function updateSharedMemberSelectors() {
   const n = parseInt(document.getElementById('num-members').value) || 0;
   const names = [];
@@ -370,11 +463,30 @@ function updateSharedMemberSelectors() {
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ RACCOLTA DATI FORM ━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Restituisce la categoria attiva (personale/pubblico/ecologico)
+ * per un dato membro e direzione, leggendo il bottone con classe .selected.
+ * @param {number} mIdx
+ * @param {'andata'|'ritorno'} dir
+ * @returns {'personale'|'pubblico'|'ecologico'}
+ */
 function getActiveCategory(mIdx, dir) {
   const btn = document.querySelector(`.cat-btn.selected[data-midx="${mIdx}"][data-dir="${dir}"]`);
   return btn ? btn.dataset.cat : 'personale';
 }
 
+/**
+ * Legge tutti i dati di una direzione (andata o ritorno) per un membro.
+ * Restituisce un oggetto con:
+ * - cat: categoria scelta
+ * - segments: array di tratti di viaggio, ciascuno con mezzo, km, condivisione
+ *
+ * Un membro può avere più segmenti se usa il trasporto pubblico multiplo
+ * o se fa parte di un viaggio condiviso con km separati aggiuntivi.
+ * @param {number} mIdx
+ * @param {'andata'|'ritorno'} dir
+ * @returns {{ cat: string, segments: Array }}
+ */
 function getDirectionData(mIdx, dir) {
   const cat = getActiveCategory(mIdx, dir);
   const segments = [];
@@ -390,17 +502,22 @@ function getDirectionData(mIdx, dir) {
     const isShared = sharedCheck && sharedCheck.checked;
 
     if (isShared) {
+      // ─ Viaggio condiviso: leggi km condivisi, numero persone, eventuali km separati dopo
       const sharedKm = parseFloat(document.getElementById(`shared-km-${mIdx}-${dir}`)?.value) || 0;
       const nPersone = parseInt(document.getElementById(`shared-n-${mIdx}-${dir}`)?.value) || 2;
       const proseguiEl = document.querySelector(`input[name="prosegui-${mIdx}-${dir}"]:checked`);
       const prosegui = proseguiEl ? proseguiEl.value : 'no';
+      // km separati: percorsi dal solo membro dopo essersi separato dal gruppo
       const sepKm = prosegui === 'si'
         ? (parseFloat(document.getElementById(`sep-km-${mIdx}-${dir}`)?.value) || 0)
         : 0;
 
+      // Indici dei membri che condividono lo stesso veicolo
       const memChecked = [...document.querySelectorAll(`input[name="smem-${mIdx}-${dir}"]:checked`)].map(c => parseInt(c.value));
 
+      // Segmento condiviso: le emissioni verranno divise per nPersone nel calcolo
       segments.push({ mezzo, km: sharedKm, shared: true, nPersone, membriCoinvolti: memChecked });
+      // Segmento separato (se presente): emissioni solo sue
       if (sepKm > 0) segments.push({ mezzo, km: sepKm, shared: false, nPersone: 1 });
     } else {
       segments.push({ mezzo, km, shared: false, nPersone: 1 });
@@ -426,6 +543,11 @@ function getDirectionData(mIdx, dir) {
   return { cat, segments };
 }
 
+/**
+ * Raccoglie i dati di tutti i membri dal form compilato.
+ * Per ogni membro restituisce: index, nome, dati andata, dati ritorno.
+ * @returns {Array<{index:number, nome:string, andata:Object, ritorno:Object}>}
+ */
 function collectFormData() {
   const n = parseInt(document.getElementById('num-members').value) || 0;
   const data = [];
@@ -444,6 +566,13 @@ function collectFormData() {
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ VALIDAZIONE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Esegue validazioni di base sui dati raccolti.
+ * Non blocca per km=0 (può capitare legittimamente), ma blocca per valori
+ * negativi o km irrealistici (>1500 km per tratta = impossibile per pendolari).
+ * @param {Array} data - Output di collectFormData()
+ * @returns {string[]} Array di messaggi di errore (vuoto se tutto ok)
+ */
 function validateData(data) {
   const errors = [];
   data.forEach((member, i) => {
@@ -487,6 +616,12 @@ function calcMemberDailyEmissions(member) {
   return { dailyG: totalG, breakdown };
 }
 
+/**
+ * Converte le emissioni giornaliere di un membro in tutte le unità utili
+ * (g/giorno, kg/giorno, kg/mese, kg/anno) e conserva il breakdown per mezzo.
+ * @param {Object} member - Oggetto membro da collectFormData()
+ * @returns {Object} risultato con nome, dailyG, dailyKg, monthlyKg, yearlyKg, breakdown
+ */
 function calculateEmissions(member) {
   const { dailyG, breakdown } = calcMemberDailyEmissions(member);
   return {
@@ -501,6 +636,12 @@ function calculateEmissions(member) {
   };
 }
 
+/**
+ * Aggrega i risultati di tutti i membri in totali famiglia.
+ * Calcola anche il breakdown familiare sommando i g/giorno per mezzo.
+ * @param {Array} data - Output di collectFormData()
+ * @returns {{ memberResults, totalYearlyKg, totalMonthlyKg, famBreakdown }}
+ */
 function calculateFamily(data) {
   const memberResults = data.map(calculateEmissions);
   const totalYearlyKg = memberResults.reduce((s, m) => s + m.yearlyKg, 0);
@@ -517,18 +658,32 @@ function calculateFamily(data) {
   return { memberResults, totalYearlyKg, totalMonthlyKg, famBreakdown };
 }
 
+/**
+ * Classifica l'impatto annuo pro capite rispetto alla media europea.
+ * Soglie: < 400 kg/anno = basso, < 900 = medio, altrimenti elevato.
+ * (Media europea trasporti ≈ 700 kg CO₂/anno per pendolari)
+ * @param {number} yearlyKgPerPerson
+ * @returns {'good'|'medium'|'bad'}
+ */
 function impactLevel(yearlyKgPerPerson) {
   // Media europea spostamenti: ~700 kg/anno
   if (yearlyKgPerPerson < 400)  return 'good';
   if (yearlyKgPerPerson < 900)  return 'medium';
   return 'bad';
 }
+/** Restituisce l'’etichetta testuale con emoji per un livello di impatto. */
 function impactLabel(level) {
   return { good: '🟢 Basso', medium: '🟡 Medio', high: '🔴 Elevato', bad: '🔴 Elevato' }[level] || '';
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ RISULTATI UI ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Mostra la pagina risultati nascondendo quella di input.
+ * Popola: summary cards (totali famiglia), righe per membro,
+ * grafici (bar + pie); poi prepara il contesto AI per la chat.
+ * @param {{ memberResults, totalYearlyKg, totalMonthlyKg, famBreakdown }} results
+ */
 function showResults(results) {
   document.getElementById('page-input').classList.add('hidden');
   const rPage = document.getElementById('page-results');
@@ -602,14 +757,24 @@ function showResults(results) {
   prepareAIContext(results);
 }
 
+/** Formatta un numero con il numero di decimali specificato, usando la virgola italiana. */
 function fmt(n, decimals = 0) {
   return Number(n).toFixed(decimals).replace('.', ',');
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ GRAFICI ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-const CHART_COLORS = ['#3a8c3f','#5dbf63','#a8d5a2','#2d6e31','#c8e6c9','#8bc48a','#1a4a1a'];
+/**
+ * Palette di colori del bar chart e del donut chart.
+ * I colori sono in scala di verde neon per coerenza con il tema dell'app.
+ */
+const CHART_COLORS = ['#22c55e','#4ade80','#86efac','#16a34a','#15803d','#34d399','#6ee7b7'];
 
+/**
+ * Disegna il bar chart (emissioni annuali per membro) su canvas.
+ * Ridisegnato ad ogni cambio tema e ad ogni resize della finestra.
+ * @param {{ memberResults: Array }} results
+ */
 function drawBarChart(results) {
   const canvas = document.getElementById('chart-bar');
   if (!canvas) return;
@@ -623,8 +788,8 @@ function drawBarChart(results) {
   canvas.height = H;
 
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const textColor = isDark ? '#e0f0d8' : '#1a2e14';
-  const gridColor = isDark ? '#2d4a2a' : '#d0e8cc';
+  const textColor = isDark ? '#d4f8dc' : '#071a0b';
+  const gridColor = isDark ? 'rgba(34,197,94,0.12)' : '#c3e8cc';
 
   ctx.clearRect(0, 0, W, H);
 
@@ -679,12 +844,17 @@ function drawBarChart(results) {
 
     // kg/anno label
     ctx.font = `10px system-ui`;
-    ctx.fillStyle = isDark ? '#8bc48a' : '#4e7042';
+    ctx.fillStyle = isDark ? '#5a9868' : '#2a6840';
     ctx.fillText('kg/anno', x + barW / 2, pad.top + chartH + 30);
     ctx.fillStyle = textColor;
   });
 }
 
+/**
+ * Disegna il donut chart (distribuzione emissioni per mezzo di trasporto) su canvas.
+ * Donut invece di pie per leggibilità: il cerchio vuoto interno mostra la label "CO₂".
+ * @param {{ famBreakdown: Object }} results
+ */
 function drawPieChart(results) {
   const canvas = document.getElementById('chart-pie');
   if (!canvas) return;
@@ -696,7 +866,7 @@ function drawPieChart(results) {
   canvas.height = H;
 
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const textColor = isDark ? '#e0f0d8' : '#1a2e14';
+  const textColor = isDark ? '#d4f8dc' : '#071a0b';
 
   ctx.clearRect(0, 0, W, H);
 
@@ -728,7 +898,7 @@ function drawPieChart(results) {
     ctx.closePath();
     ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
     ctx.fill();
-    ctx.strokeStyle = isDark ? '#111c10' : '#f0f7ee';
+    ctx.strokeStyle = isDark ? '#0a1809' : '#f2faf4';
     ctx.lineWidth = 2;
     ctx.stroke();
     startAngle += angle;
@@ -737,11 +907,11 @@ function drawPieChart(results) {
   // Donut hole
   ctx.beginPath();
   ctx.arc(cx, cy, r2, 0, 2 * Math.PI);
-  ctx.fillStyle = isDark ? '#1a2e14' : '#ffffff';
+  ctx.fillStyle = isDark ? '#0d1c11' : '#ffffff';
   ctx.fill();
 
   // Testo centrale
-  ctx.fillStyle = isDark ? '#5dbf63' : '#3a8c3f';
+  ctx.fillStyle = isDark ? '#22c55e' : '#16a34a';
   ctx.font = `bold 11px system-ui`;
   ctx.textAlign = 'center';
   ctx.fillText('CO₂', cx, cy - 6);
@@ -763,7 +933,16 @@ function drawPieChart(results) {
   });
 }
 
-// Utility: rect con angoli arrotondati
+/**
+ * Utility Canvas: disegna un rettangolo con angoli arrotondati.
+ * Necessario perché Canvas 2D non ha nativo roundRect in tutti i browser.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x - posizione sinistra
+ * @param {number} y - posizione in alto
+ * @param {number} w - larghezza
+ * @param {number} h - altezza
+ * @param {number} r - raggio degli angoli
+ */
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -780,10 +959,20 @@ function roundRect(ctx, x, y, w, h, r) {
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ AI CHAT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-let aiContext = '';  // contesto emissioni da passare al modello
+// Flusso: ping server (5s timeout) → generazione (nessun timeout: la CPU può essere lenta).
+// Strategia fallback: prova prima il server remoto (VPN), poi quello locale.
+
+let aiContext = '';  // contesto emissioni (pre-calcolato) da iniettare in ogni messaggio
 
 /* ── Debug panel ──────────────────────────────────────────────────────────── */
 
+/**
+ * Aggiunge una riga al log di debug con timestamp e tipo (ok/warn/err).
+ * Viene chiamata in tutti i punti critici del flusso Ollama per tracciare
+ * lo stato della connessione in tempo reale.
+ * @param {string} msg
+ * @param {'ok'|'warn'|'err'} type
+ */
 function debugLog(msg, type = 'ok') {
   const logEl = document.getElementById('debug-log');
   if (!logEl) return;
@@ -795,6 +984,7 @@ function debugLog(msg, type = 'ok') {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+/** Aggiorna i campi di stato nel pannello debug (URL, server attivo, errore, dot colorati). */
 function debugSet(field, value, dotClass) {
   const el = document.getElementById(`dbg-${field}`);
   if (el) el.textContent = value;
@@ -804,6 +994,10 @@ function debugSet(field, value, dotClass) {
   }
 }
 
+/**
+ * Aggiorna selettivamente i campi del debug panel.
+ * Ogni parametro è opzionale: passa solo quello che vuoi aggiornare.
+ */
 function debugUpdate({ remoteUrl, localUrl, active, last, error, remoteDot, localDot }) {
   if (remoteUrl !== undefined) {
     document.getElementById('dbg-remote-url').textContent = remoteUrl;
@@ -834,6 +1028,7 @@ function debugUpdate({ remoteUrl, localUrl, active, last, error, remoteDot, loca
   }
 }
 
+/** Inizializza il debug panel: popola gli URL statici e collega toggle + clear. */
 function initDebugPanel() {
   // Popola URL statici
   debugUpdate({
@@ -861,6 +1056,13 @@ function initDebugPanel() {
   });
 }
 
+/**
+ * Costruisce il contesto da passare al modello AI insieme al messaggio utente.
+ * Il contesto è compatto (pochi token) perché phi3 su CPU è lento:
+ * più token = più tempo di generazione.
+ * Salvato nella variabile globale aiContext per essere riusato ad ogni messaggio.
+ * @param {{ memberResults, totalYearlyKg, totalMonthlyKg }} results
+ */
 function prepareAIContext(results) {
   // Prompt compatto: phi3 su CPU è lento, meno token = risposta più veloce
   const totAnno  = fmt(results.totalYearlyKg);
@@ -1023,6 +1225,12 @@ async function sendToOllama(userMessage) {
   throw new Error('AI non disponibile');
 }
 
+/**
+ * Aggiunge una bolla messaggio (utente o AI) nella finestra chat.
+ * @param {'user'|'ai'} role - Mittente del messaggio
+ * @param {string} text     - Testo in chiaro (verrà escaped per sicurezza)
+ * @returns {HTMLElement} Il div appena creato (usato per rimuovere il typing indicator)
+ */
 function appendChatMessage(role, text) {
   const messages = document.getElementById('chat-messages');
   const div = document.createElement('div');
@@ -1036,6 +1244,10 @@ function appendChatMessage(role, text) {
   return div;
 }
 
+/**
+ * Escaping HTML di base per prevenire XSS nei messaggi chat.
+ * Solo i 3 caratteri critici: &, <, >
+ */
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -1043,6 +1255,8 @@ function escapeHtml(s) {
 /* ── Stato connessione Ollama ─────────────────────────────────────────────── */
 
 /**
+ * Aggiorna la barra di stato Ollama (colorata e con messaggio descrittivo).
+ * Abilita o disabilita input/bottone chat in base alla disponibilità.
  * @param {'remote'|'local'|'unavailable'|'idle'} status
  */
 function setOllamaStatus(status) {
@@ -1083,6 +1297,13 @@ function setOllamaStatus(status) {
 
 /* ── Setup chat ───────────────────────────────────────────────────────────── */
 
+/**
+ * Configura la chat AI:
+ * - bottone Invia e tasto Enter per inviare messaggi
+ * - mostra typing indicator durante la generazione
+ * - bottoni domande rapide (quick-btn)
+ * Disabilita l'input se l'AI risulta non disponibile dopo il tentativo.
+ */
 function setupChat() {
   const input = document.getElementById('chat-input');
   const btn   = document.getElementById('btn-send');
@@ -1139,6 +1360,11 @@ function setupChat() {
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ LOCAL STORAGE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Salva in localStorage il numero di membri e i nomi inseriti,
+ * così l'utente non deve riscrivere ogni volta che riapre la pagina.
+ * Mostra un feedback visivo "Salvato!" sul bottone per 1,5 secondi.
+ */
 function saveFormToStorage() {
   try {
     const n = parseInt(document.getElementById('num-members').value) || 0;
@@ -1160,6 +1386,10 @@ function saveFormToStorage() {
   }
 }
 
+/**
+ * Ripristina i nomi dei membri dal localStorage (se presenti).
+ * Viene chiamata dopo generateMembersForm() in modo che i campi già esistano nel DOM.
+ */
 function loadSavedFormData() {
   try {
     const raw = localStorage.getItem('co2_form_data');
@@ -1178,12 +1408,21 @@ function loadSavedFormData() {
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ PDF EXPORT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Esporta la pagina risultati come PDF tramite il dialogo di stampa del browser.
+ * Il CSS include regole @media print per nascondere header, chat e bottoni.
+ */
 function exportPDF() {
   window.print();
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ INIT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Punto di ingresso dell'applicazione.
+ * Chiamata da DOMContentLoaded: inizializza il tema, registra tutti i listener
+ * dei bottoni principali, carica eventuali dati salvati e prepara chat + debug panel.
+ */
 function init() {
   initTheme();
 
@@ -1271,6 +1510,12 @@ function init() {
   }, 250));
 }
 
+/**
+ * Debounce: ritarda l'esecuzione di fn di `delay` ms dopo l'ultima chiamata.
+ * Usato per ridisegnare i grafici solo quando il resize della finestra si ferma.
+ * @param {Function} fn
+ * @param {number} delay - millisecondi di attesa
+ */
 function debounce(fn, delay) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
